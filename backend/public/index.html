@@ -144,7 +144,7 @@
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
 
-        const res = await fetch("http://localhost:4000/book", {
+        const res = await fetch("https://btc-booking.onrender.com/book", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data)
