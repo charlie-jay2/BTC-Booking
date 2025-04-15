@@ -159,5 +159,25 @@
           .forEach(el => el.classList.remove("selected"));
       };
     </script>
+    <script>
+      // Inside your existing script...
+      async function fetchBookedSeats() {
+        const res = await fetch("https://btc-booking.onrender.com/booked-seats");
+        const bookedSeats = await res.json();
+    
+        document.querySelectorAll(".seat").forEach(div => {
+          if (bookedSeats.includes(div.textContent)) {
+            div.classList.add("disabled");
+            div.style.backgroundColor = "#aaa";
+            div.style.cursor = "not-allowed";
+            div.onclick = null;
+          }
+        });
+      }
+    
+      // After generating seats:
+      fetchBookedSeats();
+    </script>
+    
   </body>
 </html>
