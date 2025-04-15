@@ -4,26 +4,48 @@ const cors = require("cors");
 const nodemailer = require("nodemailer");
 const axios = require("axios");
 const path = require("path");
-const { createClient } = require("@supabase/supabase-js");
+const mongoose = require("mongoose");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 app.use(express.static(path.join(__dirname, "public")));
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+// MongoDB Connection
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch(err => console.error("❌ MongoDB error:", err));
 
+// MongoDB Schema
+const bookingSchema = new mongoose.Schema({
+  robloxUsername: String,
+  discordUsername: String,
+  seat: String,
+  email: String,
+  show: String,
+  date: String,
+  time: String,
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Booking = mongoose.model("Booking", bookingSchema);
+
+// Booking Route
 app.post("/book", async (req, res) => {
-  const { robloxUsername, discordUsername, seat, email, show, time, date } = req.body;
+  const { robloxUsername, discordUsername, seat, email, show, date, time } = req.body;
 
   try {
-    // Save to Supabase
-    await supabase.from("bookings").insert([
-      { robloxUsername, discordUsername, seat, email, show, date, time }
-    ]);
+    // Check if seat already booked
+    const alreadyBooked = await Booking.findOne({ seat });
+    if (alreadyBooked) {
+      return res.status(400).json({ message: "Seat already booked." });
+    }
 
-    // Send styled HTML email
+    // Save to MongoDB
+    const newBooking = new Booking({ robloxUsername, discordUsername, seat, email, show, date, time });
+    await newBooking.save();
+
+    // Send Email
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -37,58 +59,32 @@ app.post("/book", async (req, res) => {
       to: email,
       subject: `🎭 Your Booking for ${show}`,
       html: `
-  <div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; border: 2px dashed #555; padding: 20px; background-color: #fff; color: #222;">
-    <div style="text-align: center; margin-bottom: 20px;">
-      <h1 style="margin: 0; font-size: 28px; color: #c0392b;">🎭 THEATRE TICKET</h1>
-      <p style="font-size: 16px; color: #555;">Admit One</p>
-    </div>
-
-    <hr style="border: none; border-top: 1px dashed #aaa;" />
-
-    <div style="margin: 20px 0;">
-      <table style="width: 100%; font-size: 16px;">
-        <tr>
-          <td style="padding: 8px;"><strong>Show:</strong></td>
-          <td style="padding: 8px;">${show}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px;"><strong>On:</strong></td>
-          <td style="padding: 8px;">${date}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px;"><strong>At:</strong></td>
-          <td style="padding: 8px;">${time}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px;"><strong>Seat:</strong></td>
-          <td style="padding: 8px;">${seat}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px;"><strong>Roblox Username:</strong></td>
-          <td style="padding: 8px;">${robloxUsername}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px;"><strong>Discord Username:</strong></td>
-          <td style="padding: 8px;">${discordUsername}</td>
-        </tr>
-        <tr>
-          <td style="padding: 8px;"><strong>Email:</strong></td>
-          <td style="padding: 8px;">${email}</td>
-        </tr>
-      </table>
-    </div>
-
-    <hr style="border: none; border-top: 1px dashed #aaa;" />
-
-    <div style="text-align: center; margin-top: 20px;">
-      <p style="margin: 0; font-size: 14px;">🎟 Please arrive 10 minutes early for check-in.</p>
-      <p style="margin: 0; font-size: 14px;">Thank you for booking with us!</p>
-    </div>
-  </div>
-`
+        <div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; border: 2px dashed #555; padding: 20px; background-color: #fff; color: #222;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="margin: 0; font-size: 28px; color: #c0392b;">🎭 THEATRE TICKET</h1>
+            <p style="font-size: 16px; color: #555;">Admit One</p>
+          </div>
+          <hr style="border: none; border-top: 1px dashed #aaa;" />
+          <div style="margin: 20px 0;">
+            <table style="width: 100%; font-size: 16px;">
+              <tr><td style="padding: 8px;"><strong>Show:</strong></td><td>${show}</td></tr>
+              <tr><td style="padding: 8px;"><strong>Date:</strong></td><td>${date}</td></tr>
+              <tr><td style="padding: 8px;"><strong>Time:</strong></td><td>${time}</td></tr>
+              <tr><td style="padding: 8px;"><strong>Seat:</strong></td><td>${seat}</td></tr>
+              <tr><td style="padding: 8px;"><strong>Roblox:</strong></td><td>${robloxUsername}</td></tr>
+              <tr><td style="padding: 8px;"><strong>Discord:</strong></td><td>${discordUsername}</td></tr>
+              <tr><td style="padding: 8px;"><strong>Email:</strong></td><td>${email}</td></tr>
+            </table>
+          </div>
+          <hr style="border: none; border-top: 1px dashed #aaa;" />
+          <div style="text-align: center; margin-top: 20px;">
+            <p style="margin: 0; font-size: 14px;">🎟 Please arrive 10 minutes early.</p>
+            <p style="margin: 0; font-size: 14px;">Thank you for booking with us!</p>
+          </div>
+        </div>`
     });
 
-    // Send styled Discord webhook embed
+    // Discord Webhook
     await axios.post(process.env.DISCORD_WEBHOOK_URL, {
       embeds: [
         {
@@ -100,7 +96,6 @@ app.post("/book", async (req, res) => {
             { name: "Seat", value: seat, inline: true },
             { name: "Date", value: date, inline: true },
             { name: "Time", value: time, inline: true },
-            { name: "Show", value: show, inline: false },
             { name: "Email", value: email, inline: false }
           ],
           footer: {
@@ -113,31 +108,27 @@ app.post("/book", async (req, res) => {
     });
 
     res.json({ message: "Booking successful!" });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Error processing booking." });
+    console.error("❌ Booking error:", err);
+    res.status(500).json({ message: "Server error." });
   }
 });
 
+// Get all booked seats
+app.get("/booked-seats", async (req, res) => {
+  try {
+    const bookings = await Booking.find({}, "seat");
+    const bookedSeats = bookings.map(b => b.seat);
+    res.json({ bookedSeats });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch booked seats." });
+  }
+});
+
+// Serve the frontend
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.get("/booked-seats", async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from("bookings")
-      .select("seat");
-
-    if (error) throw error;
-
-    const bookedSeats = data.map(entry => entry.seat);
-    res.json(bookedSeats);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to fetch booked seats" });
-  }
-});
-
-
-app.listen(4000, () => console.log("✅ Backend running on https://btc-booking.onrender.com/:4000"));
+app.listen(4000, () => console.log("✅ Server running on http://localhost:4000"));
