@@ -128,7 +128,11 @@ app.get("/booked-seats", async (req, res) => {
 
 // Serve the frontend
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "public", "public/six", "index.html"));
+});
+
+app.use((req, res) => {
+  res.status(404).send("404 - Page Not Found");
 });
 
 app.listen(4000, () => console.log("✅ Server running on http://localhost:4000"));
